@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>ReNote Pen Cast Receiver</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; }
+    #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    #pad { background: #ffffff; box-shadow: 0 0 0 1px #e0e0e0; }
+    #idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; font-family: sans-serif; color: #555; }
+    #idle h1 { font-size: 42px; margin: 0 0 12px; }
+    #idle p { font-size: 22px; margin: 0; color: #999; }
+    .hidden { display: none !important; }
+  </style>
+  <!-- Cast Application Framework (CAF) receiver SDK -->
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+</head>
+<body>
+  <div id="idle">
+    <h1>ReNote Pen Cast</h1>
+    <p>Waiting for your notebook page…</p>
+  </div>
+  <div id="stage"><canvas id="pad"></canvas></div>
+
+  <script>
+    // Must match GoogleCastTransport.NAMESPACE on the Android sender.
+    const NAMESPACE = 'urn:x-cast:com.renote.pencast';
+
+    // Logical paper sizes (pen units) — must match SignatureView on Android.
+    const PAPER = { A5: { w: 3496, h: 4961 }, A4: { w: 4961, h: 7016 } };
+
+    const idleEl = document.getElementById('idle');
+    const stageEl = document.getElementById('stage');
+    const canvas = document.getElementById('pad');
+    const ctx = canvas.getContext('2d');
+
+    let paper = PAPER.A5;       // current logical page size
+    let landscape = false;      // rotate the page 90° to fill a landscape TV
+    let scale = 1, offX = 0, offY = 0;
+    let last = null;            // last point per active stroke {x,y}
+
+    function layout() {
+      const sw = window.innerWidth, sh = window.innerHeight;
+      // In landscape the canvas is rotated 90°, so fit against swapped screen dims.
+      const availW = landscape ? sh : sw;
+      const availH = landscape ? sw : sh;
+      const s = Math.min(availW / paper.w, availH / paper.h);
+      canvas.width = Math.round(paper.w * s);
+      canvas.height = Math.round(paper.h * s);
+      scale = s; // we draw in canvas-local coords, so map logical -> canvas directly
+      offX = 0; offY = 0;
+      // Rotate the canvas element (centered by the flexbox stage) for landscape.
+      canvas.style.transform = landscape ? 'rotate(90deg)' : 'none';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+    function mapX(x) { return x * scale + offX; }
+    function mapY(y) { return y * scale + offY; }
+
+    // ARGB int (from Android Color) -> CSS rgba string.
+    function argb(i) {
+      const a = ((i >> 24) & 0xff) / 255;
+      const r = (i >> 16) & 0xff, g = (i >> 8) & 0xff, b = i & 0xff;
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === 0 ? 1 : a) + ')';
+    }
+    function strokePx(widthLevel) {
+      // width level 1..9 -> logical px, then to canvas scale. Tweak factor to taste.
+      return Math.max(1, (widthLevel || 2) * 6 * scale);
+    }
+
+    function showPad() { idleEl.classList.add('hidden'); stageEl.classList.remove('hidden'); }
+    function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); last = null; }
+
+    // type: 0=PEN_DOWN, 1=PEN_MOVE, 2=PEN_UP
+    function drawDot(d) {
+      if (d.type === 0) { last = { x: d.x, y: d.y }; return; }
+      if (last == null) { last = { x: d.x, y: d.y }; return; }
+      ctx.strokeStyle = argb(d.color);
+      ctx.lineWidth = strokePx(d.width);
+      ctx.beginPath();
+      ctx.moveTo(mapX(last.x), mapY(last.y));
+      ctx.lineTo(mapX(d.x), mapY(d.y));
+      ctx.stroke();
+      if (d.type === 2) last = null; else last = { x: d.x, y: d.y };
+    }
+
+    function setPaper(key) {
+      paper = (key && key.toUpperCase().indexOf('A4') >= 0) ? PAPER.A4 : PAPER.A5;
+      layout();
+    }
+
+    // Handle one CastMessage envelope {t, d} (d is a JSON string).
+    function handle(env) {
+      let data = {};
+      try { data = env.d ? JSON.parse(env.d) : {}; } catch (e) { data = {}; }
+      switch (env.t) {
+        case 'hello':
+          showPad();
+          landscape = !!data.landscape;
+          setPaper(data.paperSizeKey); // setPaper() calls layout(), applying orientation
+          clearPad();
+          break;
+        case 'snapshot':
+          showPad(); clearPad();
+          (data.dots || []).forEach(drawDot);
+          break;
+        case 'dots':
+          showPad();
+          (data.dots || []).forEach(drawDot);
+          break;
+        case 'page':
+          clearPad();
+          break;
+        case 'clear':
+          clearPad();
+          break;
+        case 'bye':
+          clearPad(); stageEl.classList.add('hidden'); idleEl.classList.remove('hidden');
+          break;
+      }
+    }
+
+    window.addEventListener('resize', layout);
+    layout();
+
+    const context = cast.framework.CastReceiverContext.getInstance();
+    context.addCustomMessageListener(NAMESPACE, function (event) {
+      const m = event.data;
+      // Sender may deliver the envelope as an object or as a JSON string.
+      const env = (typeof m === 'string') ? JSON.parse(m) : m;
+      handle(env);
+    });
+
+    // Keep the receiver alive; it's an interactive (non-media) app.
+    const options = new cast.framework.CastReceiverOptions();
+    options.disableIdleTimeout = true;
+    options.maxInactivity = 3600;
+    context.start(options);
+  </script>
+</body>
+</html>
