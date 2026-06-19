@@ -7,7 +7,10 @@
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; }
     #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-    #pad { background: #ffffff; box-shadow: 0 0 0 1px #e0e0e0; }
+    /* The page sheet: a fixed-aspect box, centred by the flex stage. The two canvases
+       stack inside it — #paper draws the ruled lines, #pad draws the handwriting on top. */
+    #sheet { position: relative; background: #ffffff; box-shadow: 0 0 0 1px #e0e0e0; }
+    #sheet canvas { position: absolute; left: 0; top: 0; }
     #idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
             justify-content: center; font-family: sans-serif; color: #555; }
     #idle h1 { font-size: 42px; margin: 0 0 12px; }
@@ -22,42 +25,92 @@
     <h1>ReNote Pen Cast</h1>
     <p>Waiting for your notebook page…</p>
   </div>
-  <div id="stage"><canvas id="pad"></canvas></div>
+  <div id="stage"><div id="sheet"><canvas id="paper"></canvas><canvas id="pad"></canvas></div></div>
 
   <script>
     // Must match GoogleCastTransport.NAMESPACE on the Android sender.
     const NAMESPACE = 'urn:x-cast:com.renote.pencast';
 
-    // Logical paper sizes (pen units) — must match SignatureView on Android.
-    const PAPER = { A5: { w: 3496, h: 4961 }, A4: { w: 4961, h: 7016 } };
+    // Logical paper sizes (pen units) — must match SignatureView / PaperCalibration on Android.
+    // lx0/lx1/ly0/ly1 = the ruled-line area (where the 21 horizontal lines are drawn).
+    const PAPER = {
+      A5: { w: 3496, h: 4961, lx0: 405, lx1: 3225, ly0: 672, ly1: 4435 },
+      A4: { w: 4961, h: 7016, lx0: 251, lx1: 4556, ly0: 516, ly1: 6340 }
+    };
+    const RULED_LINES = 21;   // must match SignatureView.numberOfLines
 
     const idleEl = document.getElementById('idle');
     const stageEl = document.getElementById('stage');
+    const sheetEl = document.getElementById('sheet');
+    const paperCanvas = document.getElementById('paper');
+    const pctx = paperCanvas.getContext('2d');
     const canvas = document.getElementById('pad');
     const ctx = canvas.getContext('2d');
 
     let paper = PAPER.A5;       // current logical page size
-    let landscape = false;      // rotate the page 90° to fill a landscape TV
-    let scale = 1, offX = 0, offY = 0;
+    let ruled = true;           // draw the ruled-line background (off for custom/blank pages)
+    let landscape = false;      // landscape = WIDE page (lines + text stay horizontal, never rotated)
+    let scale = 1, offX = 0, offY = 0;   // UNIFORM scale (keeps the page's true proportions)
     let last = null;            // last point per active stroke {x,y}
 
     function layout() {
       const sw = window.innerWidth, sh = window.innerHeight;
-      // In landscape the canvas is rotated 90°, so fit against swapped screen dims.
-      const availW = landscape ? sh : sw;
-      const availH = landscape ? sw : sh;
-      const s = Math.min(availW / paper.w, availH / paper.h);
-      canvas.width = Math.round(paper.w * s);
-      canvas.height = Math.round(paper.h * s);
-      scale = s; // we draw in canvas-local coords, so map logical -> canvas directly
-      offX = 0; offY = 0;
-      // Rotate the canvas element (centered by the flexbox stage) for landscape.
-      canvas.style.transform = landscape ? 'rotate(90deg)' : 'none';
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      // UNIFORM scale always (scaleX == scaleY) → the page is NEVER distorted, and the writing
+      // always sits exactly on its line. Nothing is ever rotated or cropped.
+      if (landscape) {
+        // WIDE landscape page: the canvas becomes a wide white sheet that fills the whole TV.
+        // We scale to fit the HEIGHT (so all 21 lines are visible, never cut), keep the writing at
+        // its exact coordinates, and extend the horizontal ruled lines across the full width.
+        // Lines and text stay HORIZONTAL — only the canvas (paper) grows wide.
+        const s = sh / paper.h;
+        scale = s;
+        canvas.width = sw; canvas.height = sh;
+        paperCanvas.width = sw; paperCanvas.height = sh;
+        sheetEl.style.width = sw + 'px';
+        sheetEl.style.height = sh + 'px';
+        sheetEl.style.transform = 'none';
+        // Centre the writing area horizontally; the lines still run edge to edge.
+        offX = Math.round((sw - paper.w * s) / 2);
+        offY = 0;
+      } else {
+        // Portrait: fit the page keeping its real aspect ratio, centred (side margins).
+        const s = Math.min(sw / paper.w, sh / paper.h);
+        const cw = Math.round(paper.w * s);
+        const ch = Math.round(paper.h * s);
+        scale = s; offX = 0; offY = 0;
+        canvas.width = cw; canvas.height = ch;
+        paperCanvas.width = cw; paperCanvas.height = ch;
+        sheetEl.style.width = cw + 'px';
+        sheetEl.style.height = ch + 'px';
+        sheetEl.style.transform = 'none';
+      }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      drawRuled();
     }
     function mapX(x) { return x * scale + offX; }
     function mapY(y) { return y * scale + offY; }
+
+    // Draw the 21 horizontal ruled lines on the paper layer (behind the handwriting), using the
+    // same scale as the strokes so writing lines up exactly. Mirrors SignatureView's line drawing.
+    // In landscape the lines run the full canvas width (edge to edge); in portrait they span the
+    // page's writing area. Either way they are horizontal and at the exact line coordinates.
+    function drawRuled() {
+      pctx.clearRect(0, 0, paperCanvas.width, paperCanvas.height);
+      if (!ruled) return;
+      const x0 = landscape ? 0 : paper.lx0 * scale;
+      const x1 = landscape ? paperCanvas.width : paper.lx1 * scale;
+      const y0 = paper.ly0 * scale + offY, y1 = paper.ly1 * scale + offY;
+      const spacing = (y1 - y0) / (RULED_LINES - 1);
+      pctx.strokeStyle = '#CCCCCC';
+      pctx.lineWidth = 1;
+      for (let i = 0; i < RULED_LINES; i++) {
+        const y = Math.round(y0 + i * spacing) + 0.5; // +0.5 for crisp 1px lines
+        pctx.beginPath();
+        pctx.moveTo(x0, y);
+        pctx.lineTo(x1, y);
+        pctx.stroke();
+      }
+    }
 
     // ARGB int (from Android Color) -> CSS rgba string.
     function argb(i) {
@@ -98,8 +151,10 @@
       switch (env.t) {
         case 'hello':
           showPad();
-          landscape = !!data.landscape;
-          setPaper(data.paperSizeKey); // setPaper() calls layout(), applying orientation
+          // ruled defaults on; sender may send ruled:false for custom/blank pages.
+          ruled = (data.ruled === undefined) ? true : !!data.ruled;
+          landscape = !!data.landscape;   // rotate the whole page 90° for real landscape
+          setPaper(data.paperSizeKey); // setPaper() calls layout(), which redraws the ruled lines
           clearPad();
           break;
         case 'snapshot':
