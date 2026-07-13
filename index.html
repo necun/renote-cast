@@ -49,7 +49,7 @@
 
     let paper = PAPER.A5;       // current logical page size
     let ruled = true;           // draw the ruled-line background (off for custom/blank pages)
-    let landscape = false;      // landscape = WIDE page (lines + text stay horizontal, never rotated)
+    let landscape = false;      // true = WIDE page, upright/horizontal (photo #12); false = page rotated 90° to fill (photo #13)
     let scale = 1, offX = 0, offY = 0;   // UNIFORM scale (keeps the page's true proportions)
     let last = null;            // last point per active stroke {x,y}
 
@@ -73,8 +73,11 @@
         offX = Math.round((sw - paper.w * s) / 2);
         offY = 0;
       } else {
-        // Portrait: fit the page keeping its real aspect ratio, centred (side margins).
-        const s = Math.min(sw / paper.w, sh / paper.h);
+        // Portrait: rotate the whole page 90° so the tall page fills the (landscape) TV as much as
+        // possible. Fit the ROTATED page (swap w/h when fitting), draw the page + lines + strokes
+        // normally on a portrait-shaped canvas, then CSS-rotate the sheet 90°. Uniform scale keeps
+        // the page undistorted and the writing exactly on its lines — it just reads sideways.
+        const s = Math.min(sw / paper.h, sh / paper.w);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
         scale = s; offX = 0; offY = 0;
@@ -82,7 +85,7 @@
         paperCanvas.width = cw; paperCanvas.height = ch;
         sheetEl.style.width = cw + 'px';
         sheetEl.style.height = ch + 'px';
-        sheetEl.style.transform = 'none';
+        sheetEl.style.transform = 'rotate(90deg)';
       }
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       drawRuled();
