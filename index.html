@@ -49,7 +49,7 @@
 
     let paper = PAPER.A5;       // current logical page size
     let ruled = true;           // draw the ruled-line background (off for custom/blank pages)
-    let landscape = false;      // sender flag: false = PORTRAIT (wide upright page, image #14); true = LANDSCAPE (page rotated 90°, image #13)
+    let landscape = false;      // sender flag: false = PORTRAIT (vertical page, centred); true = LANDSCAPE (page rotated 90° to horizontal)
     let scale = 1, offX = 0, offY = 0;   // UNIFORM scale (keeps the page's true proportions)
     let last = null;            // last point per active stroke {x,y}
 
@@ -58,25 +58,21 @@
       // UNIFORM scale always (scaleX == scaleY) → the page is NEVER distorted, and the writing
       // always sits exactly on its line. Nothing is ever rotated or cropped.
       if (!landscape) {
-        // PORTRAIT = WIDE upright page that fills the whole TV (image #14). Scale to fit the HEIGHT
-        // (so all 21 lines are visible, never cut), keep the writing at its exact coordinates, and
-        // extend the horizontal ruled lines across the full width. Lines and text stay HORIZONTAL —
-        // only the canvas (paper) grows wide. Nothing rotated.
-        const s = sh / paper.h;
-        scale = s;
-        canvas.width = sw; canvas.height = sh;
-        paperCanvas.width = sw; paperCanvas.height = sh;
-        sheetEl.style.width = sw + 'px';
-        sheetEl.style.height = sh + 'px';
+        // PORTRAIT = page VERTICAL, true aspect ratio, centred (side margins). Nothing rotated —
+        // matches the Samsung mirror's portrait.
+        const s = Math.min(sw / paper.w, sh / paper.h);
+        const cw = Math.round(paper.w * s);
+        const ch = Math.round(paper.h * s);
+        scale = s; offX = 0; offY = 0;
+        canvas.width = cw; canvas.height = ch;
+        paperCanvas.width = cw; paperCanvas.height = ch;
+        sheetEl.style.width = cw + 'px';
+        sheetEl.style.height = ch + 'px';
         sheetEl.style.transform = 'none';
-        // Centre the writing area horizontally; the lines still run edge to edge.
-        offX = Math.round((sw - paper.w * s) / 2);
-        offY = 0;
       } else {
-        // LANDSCAPE = the whole page rotated 90° to fill the TV (image #13). Fit the ROTATED page
-        // (swap w/h when fitting), draw the page + lines + strokes normally on a portrait-shaped
-        // canvas, then CSS-rotate the sheet 90°. Uniform scale keeps the page undistorted and the
-        // writing exactly on its lines — it just reads sideways.
+        // LANDSCAPE = the whole page rotated 90° (LEFT) to lie HORIZONTAL, centred and filling —
+        // matches the Samsung mirror's landscape. Fit the page at true aspect, draw normally, then
+        // CSS-rotate the sheet -90°. Uniform scale → undistorted; writing reads sideways.
         const s = Math.min(sw / paper.h, sh / paper.w);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
@@ -85,7 +81,7 @@
         paperCanvas.width = cw; paperCanvas.height = ch;
         sheetEl.style.width = cw + 'px';
         sheetEl.style.height = ch + 'px';
-        sheetEl.style.transform = 'rotate(90deg)';
+        sheetEl.style.transform = 'rotate(-90deg)';
       }
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       drawRuled();
@@ -95,13 +91,13 @@
 
     // Draw the 21 horizontal ruled lines on the paper layer (behind the handwriting), using the
     // same scale as the strokes so writing lines up exactly. Mirrors SignatureView's line drawing.
-    // In the wide PORTRAIT layout the lines run the full canvas width (edge to edge); in the
-    // rotated LANDSCAPE layout they span the page's writing area and rotate with the sheet.
+    // The lines span the page's writing area (lx0..lx1) in both orientations; in landscape they
+    // rotate 90° with the sheet along with the strokes.
     function drawRuled() {
       pctx.clearRect(0, 0, paperCanvas.width, paperCanvas.height);
       if (!ruled) return;
-      const x0 = !landscape ? 0 : paper.lx0 * scale;
-      const x1 = !landscape ? paperCanvas.width : paper.lx1 * scale;
+      const x0 = paper.lx0 * scale;
+      const x1 = paper.lx1 * scale;
       const y0 = paper.ly0 * scale + offY, y1 = paper.ly1 * scale + offY;
       const spacing = (y1 - y0) / (RULED_LINES - 1);
       pctx.strokeStyle = '#CCCCCC';
