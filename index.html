@@ -7,8 +7,6 @@
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; }
     #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-    /* The page sheet: a fixed-aspect box, centred by the flex stage. The two canvases
-       stack inside it — #paper draws the ruled lines, #pad draws the handwriting on top. */
     #sheet { position: relative; background: #ffffff; box-shadow: 0 0 0 1px #e0e0e0; }
     #sheet canvas { position: absolute; left: 0; top: 0; }
     #idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -17,27 +15,23 @@
     #idle p { font-size: 22px; margin: 0; color: #999; }
     .hidden { display: none !important; }
   </style>
-  <!-- Cast Application Framework (CAF) receiver SDK -->
-  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_pt>
 </head>
 <body>
   <div id="idle">
     <h1>ReNote Pen Cast</h1>
     <p>Waiting for your notebook page…</p>
   </div>
-  <div id="stage"><div id="sheet"><canvas id="paper"></canvas><canvas id="pad"></canvas></div></div>
+  <div id="stage"><div id="sheet"><canvas id="paper"></canvas><canvas id="
 
   <script>
-    // Must match GoogleCastTransport.NAMESPACE on the Android sender.
     const NAMESPACE = 'urn:x-cast:com.renote.pencast';
 
-    // Logical paper sizes (pen units) — must match SignatureView / PaperCalibration on Android.
-    // lx0/lx1/ly0/ly1 = the ruled-line area (where the 21 horizontal lines are drawn).
     const PAPER = {
       A5: { w: 3496, h: 4961, lx0: 405, lx1: 3225, ly0: 672, ly1: 4435 },
       A4: { w: 4961, h: 7016, lx0: 251, lx1: 4556, ly0: 516, ly1: 6340 }
     };
-    const RULED_LINES = 21;   // must match SignatureView.numberOfLines
+    const RULED_LINES = 21;
 
     const idleEl = document.getElementById('idle');
     const stageEl = document.getElementById('stage');
@@ -47,19 +41,16 @@
     const canvas = document.getElementById('pad');
     const ctx = canvas.getContext('2d');
 
-    let paper = PAPER.A5;       // current logical page size
-    let ruled = true;           // draw the ruled-line background (off for custom/blank pages)
-    let landscape = false;      // sender flag: false = PORTRAIT (vertical page, centred); true = LANDSCAPE (page rotated 90° to horizontal)
-    let scale = 1, offX = 0, offY = 0;   // UNIFORM scale (keeps the page's true proportions)
-    let last = null;            // last point per active stroke {x,y}
+    let paper = PAPER.A5;
+    let ruled = true;
+    let landscape = false;      // false = PORTRAIT (vertical page, centretated 90° to horizontal)
+    let scale = 1, offX = 0, offY = 0;
+    let last = null;
 
     function layout() {
       const sw = window.innerWidth, sh = window.innerHeight;
-      // UNIFORM scale always (scaleX == scaleY) → the page is NEVER distorted, and the writing
-      // always sits exactly on its line. Nothing is ever rotated or cropped.
       if (!landscape) {
-        // PORTRAIT = page VERTICAL, true aspect ratio, centred (side margins). Nothing rotated —
-        // matches the Samsung mirror's portrait.
+        // PORTRAIT = page vertical, true aspect, centred (matches Samsung
         const s = Math.min(sw / paper.w, sh / paper.h);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
@@ -70,9 +61,7 @@
         sheetEl.style.height = ch + 'px';
         sheetEl.style.transform = 'none';
       } else {
-        // LANDSCAPE = the whole page rotated 90° (LEFT) to lie HORIZONTAL, centred and filling —
-        // matches the Samsung mirror's landscape. Fit the page at true aspect, draw normally, then
-        // CSS-rotate the sheet -90°. Uniform scale → undistorted; writing reads sideways.
+        // LANDSCAPE = whole page rotated 90° (left) to horizontal, centre.
         const s = Math.min(sw / paper.h, sh / paper.w);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
@@ -89,10 +78,6 @@
     function mapX(x) { return x * scale + offX; }
     function mapY(y) { return y * scale + offY; }
 
-    // Draw the 21 horizontal ruled lines on the paper layer (behind the handwriting), using the
-    // same scale as the strokes so writing lines up exactly. Mirrors SignatureView's line drawing.
-    // The lines span the page's writing area (lx0..lx1) in both orientations; in landscape they
-    // rotate 90° with the sheet along with the strokes.
     function drawRuled() {
       pctx.clearRect(0, 0, paperCanvas.width, paperCanvas.height);
       if (!ruled) return;
@@ -103,7 +88,7 @@
       pctx.strokeStyle = '#CCCCCC';
       pctx.lineWidth = 1;
       for (let i = 0; i < RULED_LINES; i++) {
-        const y = Math.round(y0 + i * spacing) + 0.5; // +0.5 for crisp 1px lines
+        const y = Math.round(y0 + i * spacing) + 0.5;
         pctx.beginPath();
         pctx.moveTo(x0, y);
         pctx.lineTo(x1, y);
@@ -111,21 +96,18 @@
       }
     }
 
-    // ARGB int (from Android Color) -> CSS rgba string.
     function argb(i) {
       const a = ((i >> 24) & 0xff) / 255;
       const r = (i >> 16) & 0xff, g = (i >> 8) & 0xff, b = i & 0xff;
-      return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === 0 ? 1 : a) + ')';
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === 0 ? 1 : a) + '
     }
     function strokePx(widthLevel) {
-      // width level 1..9 -> logical px, then to canvas scale. Tweak factor to taste.
       return Math.max(1, (widthLevel || 2) * 6 * scale);
     }
 
-    function showPad() { idleEl.classList.add('hidden'); stageEl.classList.remove('hidden'); }
-    function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); last = null; }
+    function showPad() { idleEl.classList.add('hidden'); stageEl.classList
+    function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // type: 0=PEN_DOWN, 1=PEN_MOVE, 2=PEN_UP
     function drawDot(d) {
       if (d.type === 0) { last = { x: d.x, y: d.y }; return; }
       if (last == null) { last = { x: d.x, y: d.y }; return; }
@@ -139,21 +121,19 @@
     }
 
     function setPaper(key) {
-      paper = (key && key.toUpperCase().indexOf('A4') >= 0) ? PAPER.A4 : PAPER.A5;
+      paper = (key && key.toUpperCase().indexOf('A4') >= 0) ? PAPER.A4 : P
       layout();
     }
 
-    // Handle one CastMessage envelope {t, d} (d is a JSON string).
     function handle(env) {
       let data = {};
-      try { data = env.d ? JSON.parse(env.d) : {}; } catch (e) { data = {}; }
+      try { data = env.d ? JSON.parse(env.d) : {}; } catch (e) { data = {}
       switch (env.t) {
         case 'hello':
           showPad();
-          // ruled defaults on; sender may send ruled:false for custom/blank pages.
           ruled = (data.ruled === undefined) ? true : !!data.ruled;
-          landscape = !!data.landscape;   // rotate the whole page 90° for real landscape
-          setPaper(data.paperSizeKey); // setPaper() calls layout(), which redraws the ruled lines
+          landscape = !!data.landscape;
+          setPaper(data.paperSizeKey);
           clearPad();
           break;
         case 'snapshot':
@@ -171,7 +151,7 @@
           clearPad();
           break;
         case 'bye':
-          clearPad(); stageEl.classList.add('hidden'); idleEl.classList.remove('hidden');
+          clearPad(); stageEl.classList.add('hidden'); idleEl.classList.re
           break;
       }
     }
@@ -182,12 +162,10 @@
     const context = cast.framework.CastReceiverContext.getInstance();
     context.addCustomMessageListener(NAMESPACE, function (event) {
       const m = event.data;
-      // Sender may deliver the envelope as an object or as a JSON string.
       const env = (typeof m === 'string') ? JSON.parse(m) : m;
       handle(env);
     });
 
-    // Keep the receiver alive; it's an interactive (non-media) app.
     const options = new cast.framework.CastReceiverOptions();
     options.disableIdleTimeout = true;
     options.maxInactivity = 3600;
