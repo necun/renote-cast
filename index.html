@@ -49,7 +49,7 @@
 
     let paper = PAPER.A5;       // current logical page size
     let ruled = true;           // draw the ruled-line background (off for custom/blank pages)
-    let landscape = false;      // true = WIDE page, upright/horizontal (photo #12); false = page rotated 90° to fill (photo #13)
+    let landscape = false;      // sender flag: false = PORTRAIT (wide upright page, image #14); true = LANDSCAPE (page rotated 90°, image #13)
     let scale = 1, offX = 0, offY = 0;   // UNIFORM scale (keeps the page's true proportions)
     let last = null;            // last point per active stroke {x,y}
 
@@ -57,11 +57,11 @@
       const sw = window.innerWidth, sh = window.innerHeight;
       // UNIFORM scale always (scaleX == scaleY) → the page is NEVER distorted, and the writing
       // always sits exactly on its line. Nothing is ever rotated or cropped.
-      if (landscape) {
-        // WIDE landscape page: the canvas becomes a wide white sheet that fills the whole TV.
-        // We scale to fit the HEIGHT (so all 21 lines are visible, never cut), keep the writing at
-        // its exact coordinates, and extend the horizontal ruled lines across the full width.
-        // Lines and text stay HORIZONTAL — only the canvas (paper) grows wide.
+      if (!landscape) {
+        // PORTRAIT = WIDE upright page that fills the whole TV (image #14). Scale to fit the HEIGHT
+        // (so all 21 lines are visible, never cut), keep the writing at its exact coordinates, and
+        // extend the horizontal ruled lines across the full width. Lines and text stay HORIZONTAL —
+        // only the canvas (paper) grows wide. Nothing rotated.
         const s = sh / paper.h;
         scale = s;
         canvas.width = sw; canvas.height = sh;
@@ -73,10 +73,10 @@
         offX = Math.round((sw - paper.w * s) / 2);
         offY = 0;
       } else {
-        // Portrait: rotate the whole page 90° so the tall page fills the (landscape) TV as much as
-        // possible. Fit the ROTATED page (swap w/h when fitting), draw the page + lines + strokes
-        // normally on a portrait-shaped canvas, then CSS-rotate the sheet 90°. Uniform scale keeps
-        // the page undistorted and the writing exactly on its lines — it just reads sideways.
+        // LANDSCAPE = the whole page rotated 90° to fill the TV (image #13). Fit the ROTATED page
+        // (swap w/h when fitting), draw the page + lines + strokes normally on a portrait-shaped
+        // canvas, then CSS-rotate the sheet 90°. Uniform scale keeps the page undistorted and the
+        // writing exactly on its lines — it just reads sideways.
         const s = Math.min(sw / paper.h, sh / paper.w);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
@@ -95,13 +95,13 @@
 
     // Draw the 21 horizontal ruled lines on the paper layer (behind the handwriting), using the
     // same scale as the strokes so writing lines up exactly. Mirrors SignatureView's line drawing.
-    // In landscape the lines run the full canvas width (edge to edge); in portrait they span the
-    // page's writing area. Either way they are horizontal and at the exact line coordinates.
+    // In the wide PORTRAIT layout the lines run the full canvas width (edge to edge); in the
+    // rotated LANDSCAPE layout they span the page's writing area and rotate with the sheet.
     function drawRuled() {
       pctx.clearRect(0, 0, paperCanvas.width, paperCanvas.height);
       if (!ruled) return;
-      const x0 = landscape ? 0 : paper.lx0 * scale;
-      const x1 = landscape ? paperCanvas.width : paper.lx1 * scale;
+      const x0 = !landscape ? 0 : paper.lx0 * scale;
+      const x1 = !landscape ? paperCanvas.width : paper.lx1 * scale;
       const y0 = paper.ly0 * scale + offY, y1 = paper.ly1 * scale + offY;
       const spacing = (y1 - y0) / (RULED_LINES - 1);
       pctx.strokeStyle = '#CCCCCC';
