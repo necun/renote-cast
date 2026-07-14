@@ -15,14 +15,14 @@
     #idle p { font-size: 22px; margin: 0; color: #999; }
     .hidden { display: none !important; }
   </style>
-  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_pt>
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 </head>
 <body>
   <div id="idle">
     <h1>ReNote Pen Cast</h1>
     <p>Waiting for your notebook page…</p>
   </div>
-  <div id="stage"><div id="sheet"><canvas id="paper"></canvas><canvas id="
+  <div id="stage" class="hidden"><div id="sheet"><canvas id="paper"></canvas><canvas id="pad"></canvas></div></div>
 
   <script>
     const NAMESPACE = 'urn:x-cast:com.renote.pencast';
@@ -43,14 +43,14 @@
 
     let paper = PAPER.A5;
     let ruled = true;
-    let landscape = false;      // false = PORTRAIT (vertical page, centretated 90° to horizontal)
+    let landscape = false;      // false = PORTRAIT (vertical page, centred); true = LANDSCAPE (page rotated 90° to horizontal)
     let scale = 1, offX = 0, offY = 0;
     let last = null;
 
     function layout() {
       const sw = window.innerWidth, sh = window.innerHeight;
       if (!landscape) {
-        // PORTRAIT = page vertical, true aspect, centred (matches Samsung
+        // PORTRAIT = page vertical, true aspect, centred (matches Samsung mirror portrait).
         const s = Math.min(sw / paper.w, sh / paper.h);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
@@ -61,7 +61,7 @@
         sheetEl.style.height = ch + 'px';
         sheetEl.style.transform = 'none';
       } else {
-        // LANDSCAPE = whole page rotated 90° (left) to horizontal, centre.
+        // LANDSCAPE = whole page rotated 90° (left) to horizontal, centred + filling (matches Samsung).
         const s = Math.min(sw / paper.h, sh / paper.w);
         const cw = Math.round(paper.w * s);
         const ch = Math.round(paper.h * s);
@@ -99,14 +99,14 @@
     function argb(i) {
       const a = ((i >> 24) & 0xff) / 255;
       const r = (i >> 16) & 0xff, g = (i >> 8) & 0xff, b = i & 0xff;
-      return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === 0 ? 1 : a) + '
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === 0 ? 1 : a) + ')';
     }
     function strokePx(widthLevel) {
       return Math.max(1, (widthLevel || 2) * 6 * scale);
     }
 
-    function showPad() { idleEl.classList.add('hidden'); stageEl.classList
-    function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height)
+    function showPad() { idleEl.classList.add('hidden'); stageEl.classList.remove('hidden'); }
+    function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); last = null; }
 
     function drawDot(d) {
       if (d.type === 0) { last = { x: d.x, y: d.y }; return; }
@@ -121,13 +121,13 @@
     }
 
     function setPaper(key) {
-      paper = (key && key.toUpperCase().indexOf('A4') >= 0) ? PAPER.A4 : P
+      paper = (key && key.toUpperCase().indexOf('A4') >= 0) ? PAPER.A4 : PAPER.A5;
       layout();
     }
 
     function handle(env) {
       let data = {};
-      try { data = env.d ? JSON.parse(env.d) : {}; } catch (e) { data = {}
+      try { data = env.d ? JSON.parse(env.d) : {}; } catch (e) { data = {}; }
       switch (env.t) {
         case 'hello':
           showPad();
@@ -151,7 +151,7 @@
           clearPad();
           break;
         case 'bye':
-          clearPad(); stageEl.classList.add('hidden'); idleEl.classList.re
+          clearPad(); stageEl.classList.add('hidden'); idleEl.classList.remove('hidden');
           break;
       }
     }
