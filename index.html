@@ -101,8 +101,12 @@
       const r = (i >> 16) & 0xff, g = (i >> 8) & 0xff, b = i & 0xff;
       return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === 0 ? 1 : a) + ')';
     }
-    function strokePx(widthLevel) {
-      return Math.max(1, (widthLevel || 2) * 6 * scale);
+    function strokePx(level) {
+      // Mirror Android's Glo.lineWidthByLevel2: width ∝ paper width × per-level factor, so TV
+      // strokes match the phone's thickness (medium ≈ 0.5% of the page) across A4/A5.
+      const lvl = level || 6;
+      const factor = lvl >= 10 ? 3.6 : lvl >= 6 ? 2.5 : lvl >= 2 ? 1.6 : 1.0;
+      return Math.max(1, paper.w * 0.002 * factor * scale);
     }
 
     function showPad() { idleEl.classList.add('hidden'); stageEl.classList.remove('hidden'); }
